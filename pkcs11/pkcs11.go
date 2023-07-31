@@ -1281,7 +1281,7 @@ func (r *rsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts)
 	cSig := make([]C.CK_BYTE, r.pub.Size())
 	cSigLen := C.CK_ULONG(len(cSig))
 
-	m := C.CK_MECHANISM{C.CKM_RSA_PKCS, nil, 0}
+	m := makeMechanism(C.CKM_RSA_PKCS, nil, 0)
 	rv := C.ck_sign_init(r.o.fl, r.o.h, &m, r.o.o)
 	if err := isOk("C_SignInit", rv); err != nil {
 		return nil, err
@@ -1334,11 +1334,7 @@ func (r *rsaPrivateKey) signPSS(digest []byte, opts *rsa.PSSOptions) ([]byte, er
 	cSig := make([]C.CK_BYTE, r.pub.Size())
 	cSigLen := C.CK_ULONG(len(cSig))
 
-	m := C.CK_MECHANISM{
-		mechanism:      C.CKM_RSA_PKCS_PSS,
-		pParameter:     C.CK_VOID_PTR(cParam),
-		ulParameterLen: C.CK_ULONG(C.sizeof_CK_RSA_PKCS_PSS_PARAMS),
-	}
+	m := makeMechanism(C.CKM_RSA_PKCS_PSS, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_PSS_PARAMS)
 
 	rv := C.ck_sign_init(r.o.fl, r.o.h, &m, r.o.o)
 	if err := isOk("C_SignInit", rv); err != nil {
@@ -1371,7 +1367,7 @@ type ecdsaSignature struct {
 
 func (e *ecdsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	// http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/cs01/pkcs11-curr-v2.40-cs01.html#_Toc399398884
-	m := C.CK_MECHANISM{C.CKM_ECDSA, nil, 0}
+	m := makeMechanism(C.CKM_ECDSA, nil, 0)
 	rv := C.ck_sign_init(e.o.fl, e.o.h, &m, e.o.o)
 	if err := isOk("C_SignInit", rv); err != nil {
 		return nil, err
@@ -1762,11 +1758,7 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 	cParam.pSourceData = nil
 	cParam.ulSourceDataLen = 0
 
-	m := C.CK_MECHANISM{
-		mechanism:      C.CKM_RSA_PKCS_OAEP,
-		pParameter:     C.CK_VOID_PTR(cParam),
-		ulParameterLen: C.CK_ULONG(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS),
-	}
+	m := makeMechanism(C.CKM_RSA_PKCS_OAEP, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_OAEP_PARAMS)
 
 	rv := C.ck_encrypt_init(r.o.fl, r.o.h, &m, r.pubH.o)
 	if err := isOk("C_EncryptInit", rv); err != nil {
@@ -1815,11 +1807,7 @@ func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
 	cParam.pSourceData = nil
 	cParam.ulSourceDataLen = 0
 
-	m := C.CK_MECHANISM{
-		mechanism:      C.CKM_RSA_PKCS_OAEP,
-		pParameter:     C.CK_VOID_PTR(cParam),
-		ulParameterLen: C.CK_ULONG(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS),
-	}
+	m := makeMechanism(C.CKM_RSA_PKCS_OAEP, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_OAEP_PARAMS)
 
 	rv := C.ck_decrypt_init(r.o.fl, r.o.h, &m, r.o.o)
 	if err := isOk("C_DecryptInit", rv); err != nil {
@@ -1859,4 +1847,13 @@ func toCBytes(data []byte) []C.CK_BYTE {
 		cBytes[i] = C.CK_BYTE(b)
 	}
 	return cBytes
+}
+
+func makeMechanism(mech C.CK_MECHANISM_TYPE, paramPtr C.CK_VOID_PTR, paramLen int) C.CK_MECHANISM {
+	mechanism := C.CK_MECHANISM{
+		mechanism: mech,
+		pParameter: paramPtr,
+		ulParameterLen: C.CK_ULONG(paramLen),
+	}
+	return mechanism
 }
