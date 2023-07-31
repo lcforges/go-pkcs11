@@ -1765,9 +1765,15 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// RSA is only able to encrypt data to a maximum amount equal to your key size
-	cCipher := make([]C.CK_BYTE, r.pub.Size())
-	cCipherLen := C.CK_ULONG(len(cCipher))
+	var cCipherLen C.CK_ULONG
+
+	// First call is used to determine maximum length of encrypted data (PKCS Specifications Section 5.2)
+	rv = C.ck_encrypt(r.o.fl, r.o.h, &cDataBytes[0], C.CK_ULONG(len(cDataBytes)), nil, &cCipherLen)
+	if err := isOk("C_Encrypt", rv); err != nil {
+		return nil, err
+	}
+
+	cCipher := make([]C.CK_BYTE, cCipherLen)
 
 	rv = C.ck_encrypt(r.o.fl, r.o.h, &cDataBytes[0], C.CK_ULONG(len(cDataBytes)), &cCipher[0], &cCipherLen)
 	if err := isOk("C_Encrypt", rv); err != nil {
@@ -1816,6 +1822,7 @@ func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
 
 	var cDecryptedLen C.CK_ULONG
 
+	// First call is used to determine length necessary to hold decrypted data
 	rv = C.ck_decrypt(r.o.fl, r.o.h, &cEncDataBytes[0], C.CK_ULONG(len(cEncDataBytes)), nil, &cDecryptedLen)
 	if err := isOk("C_Decrypt", rv); err != nil {
 		return nil, err
@@ -1851,8 +1858,8 @@ func toCBytes(data []byte) []C.CK_BYTE {
 
 func makeMechanism(mech C.CK_MECHANISM_TYPE, paramPtr C.CK_VOID_PTR, paramLen int) C.CK_MECHANISM {
 	mechanism := C.CK_MECHANISM{
-		mechanism: mech,
-		pParameter: paramPtr,
+		mechanism:      mech,
+		pParameter:     paramPtr,
 		ulParameterLen: C.CK_ULONG(paramLen),
 	}
 	return mechanism
