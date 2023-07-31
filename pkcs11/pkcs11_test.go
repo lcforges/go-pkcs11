@@ -665,3 +665,45 @@ func TestDecryptRSA(t *testing.T) {
 		})
 	}
 }
+
+// testing.T needed to initialize new test key
+func TestBenchmarkEncryptRSA(t *testing.T) {
+	msg := "Plain text to encrypt"
+	bMsg := []byte(msg)
+	tests := []struct {
+		name string
+		bits int
+	}{
+		{"2048", 2048},
+		{"4096", 4096},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := newTestSlot(t)
+			o := keyOptions{RSABits: test.bits}
+			priv, err := s.generate(o)
+			if err != nil {
+				t.Fatalf("generate(%#v) failed: %v", o, err)
+				return
+			}
+			rsaPriv, ok := priv.(*rsaPrivateKey)
+			if !ok {
+				t.Fatalf("Private Key unexpected type, got %T, want *rsaPrivateKey", priv)
+				return
+			}
+			// SHA1 is the only hash function supported by softhsm
+			rsaPriv.WithHash(crypto.SHA1)
+
+			t.Log(testing.Benchmark(func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					cipher, err := rsaPriv.encryptRSA(bMsg)
+					if err != nil {
+						t.Errorf("encryptRSA Error: %v", err)
+						t.Log(cipher)
+						return
+					}
+				}
+			}))
+		})
+	}
+}
