@@ -1876,18 +1876,3 @@ func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
 
 	return decrypted, nil
 }
-
-// func Encrypt(k crypto.PrivateKey, data []byte) ([]byte, error) {
-// 	kt := (*C.CK_KEY_TYPE)(C.malloc(C.sizeof_CK_KEY_TYPE))
-// 	defer C.free(unsafe.Pointer(kt))
-// 	switch *kt {
-// 	case C.CKK_EC:
-// 		//TODO: call encrypt ec
-// 		return nil, nil
-// 	case C.CKK_RSA:
-// 		rsaPriv := k.(*rsaPrivateKey)
-// 		return rsaPriv.encryptRSA(data)
-// 	default:
-// 		return nil, fmt.Errorf("unsupported key type: 0x%x", *kt)
-// 	}
-// }
