@@ -1275,13 +1275,8 @@ func (r *rsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts)
 		return nil, fmt.Errorf("unsupported hash function: %s", opts.HashFunc())
 	}
 
-	cBytes := make([]C.CK_BYTE, len(prefix)+len(digest))
-	for i, b := range prefix {
-		cBytes[i] = C.CK_BYTE(b)
-	}
-	for i, b := range digest {
-		cBytes[len(prefix)+i] = C.CK_BYTE(b)
-	}
+	preAndDigest := append(prefix, digest...)
+	cBytes := toCBytes(preAndDigest)
 
 	cSig := make([]C.CK_BYTE, r.pub.Size())
 	cSigLen := C.CK_ULONG(len(cSig))
@@ -1299,10 +1294,7 @@ func (r *rsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts)
 	if int(cSigLen) != len(cSig) {
 		return nil, fmt.Errorf("expected signature of length %d, got %d", len(cSig), cSigLen)
 	}
-	sig := make([]byte, len(cSig))
-	for i, b := range cSig {
-		sig[i] = byte(b)
-	}
+	sig := toBytes(cSig)
 	return sig, nil
 }
 
@@ -1337,10 +1329,7 @@ func (r *rsaPrivateKey) signPSS(digest []byte, opts *rsa.PSSOptions) ([]byte, er
 		cParam.sLen = C.CK_ULONG(opts.SaltLength)
 	}
 
-	cBytes := make([]C.CK_BYTE, len(digest))
-	for i, b := range digest {
-		cBytes[i] = C.CK_BYTE(b)
-	}
+	cBytes := toCBytes(digest)
 
 	cSig := make([]C.CK_BYTE, r.pub.Size())
 	cSigLen := C.CK_ULONG(len(cSig))
@@ -1363,10 +1352,7 @@ func (r *rsaPrivateKey) signPSS(digest []byte, opts *rsa.PSSOptions) ([]byte, er
 	if int(cSigLen) != len(cSig) {
 		return nil, fmt.Errorf("expected signature of length %d, got %d", len(cSig), cSigLen)
 	}
-	sig := make([]byte, len(cSig))
-	for i, b := range cSig {
-		sig[i] = byte(b)
-	}
+	sig := toBytes(cSig)
 	return sig, nil
 }
 
@@ -1395,10 +1381,7 @@ func (e *ecdsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpt
 	cSig := make([]C.CK_BYTE, byteLen*2)
 	cSigLen := C.CK_ULONG(len(cSig))
 
-	cBytes := make([]C.CK_BYTE, len(digest))
-	for i, b := range digest {
-		cBytes[i] = C.CK_BYTE(b)
-	}
+	cBytes := toCBytes(digest)
 
 	rv = C.ck_sign(e.o.fl, e.o.h, &cBytes[0], C.CK_ULONG(len(digest)), &cSig[0], &cSigLen)
 	if err := isOk("C_Sign", rv); err != nil {
@@ -1408,10 +1391,7 @@ func (e *ecdsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpt
 	if int(cSigLen) != len(cSig) {
 		return nil, fmt.Errorf("expected signature of length %d, got %d", len(cSig), cSigLen)
 	}
-	sig := make([]byte, len(cSig))
-	for i, b := range cSig {
-		sig[i] = byte(b)
-	}
+	sig := toBytes(cSig)
 
 	var (
 		r = big.NewInt(0)
@@ -1776,10 +1756,7 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported hash algorithm: %s", hash)
 	}
 
-	cDataBytes := make([]C.CK_BYTE, len(data))
-	for i, b := range cDataBytes {
-		cDataBytes[i] = C.CK_BYTE(b)
-	}
+	cDataBytes := toCBytes(data)
 
 	cParam.source = C.CKZ_DATA_SPECIFIED
 	cParam.pSourceData = nil
@@ -1805,10 +1782,7 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	cipher := make([]byte, len(cCipher))
-	for i, b := range cCipher {
-		cipher[i] = byte(b)
-	}
+	cipher := toBytes(cCipher)
 
 	return cipher, nil
 }
@@ -1835,10 +1809,7 @@ func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported hash algorithm: %s", hash)
 	}
 
-	cEncDataBytes := make([]C.CK_BYTE, len(encryptedData))
-	for i, b := range encryptedData {
-		cEncDataBytes[i] = C.CK_BYTE(b)
-	}
+	cEncDataBytes := toCBytes(encryptedData)
 
 	cParam.source = C.CKZ_DATA_SPECIFIED
 	cParam.pSourceData = nil
@@ -1869,10 +1840,23 @@ func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	decrypted := make([]byte, len(cDecrypted))
-	for i, b := range cDecrypted {
-		decrypted[i] = byte(b)
-	}
+	decrypted := toBytes(cDecrypted)
 
 	return decrypted, nil
+}
+
+func toBytes(data []C.CK_BYTE) []byte {
+	goBytes := make([]byte, len(data))
+	for i, b := range data {
+		goBytes[i] = byte(b)
+	}
+	return goBytes
+}
+
+func toCBytes(data []byte) []C.CK_BYTE {
+	cBytes := make([]C.CK_BYTE, len(data))
+	for i, b := range data {
+		cBytes[i] = C.CK_BYTE(b)
+	}
+	return cBytes
 }
