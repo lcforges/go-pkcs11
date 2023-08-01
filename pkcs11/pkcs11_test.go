@@ -619,10 +619,9 @@ func TestEncryptRSA(t *testing.T) {
 			}
 			// SHA1 is the only hash function supported by softhsm
 			rsaPriv.WithHash(crypto.SHA1)
-			cipher, err := rsaPriv.encryptRSA(b)
+			_, err = rsaPriv.encryptRSA(b)
 			if err != nil {
 				t.Errorf("encryptRSA Error: %v", err)
-				t.Log(cipher)
 			}
 		})
 	}

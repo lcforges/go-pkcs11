@@ -1732,31 +1732,13 @@ func (r *rsaPrivateKey) WithPublicKeyHandle(o Object) *rsaPrivateKey {
 
 func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 	hash := r.getHash()
-	cParam := (C.CK_RSA_PKCS_OAEP_PARAMS_PTR)(C.malloc(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS))
+	cParam, err := makeCParamRSAOAEP(hash)
+	if err != nil {
+		return nil, err
+	}
 	defer C.free(unsafe.Pointer(cParam))
 
-	switch *hash {
-	case crypto.SHA256:
-		cParam.hashAlg = C.CKM_SHA256
-		cParam.mgf = C.CKG_MGF1_SHA256
-	case crypto.SHA384:
-		cParam.hashAlg = C.CKM_SHA384
-		cParam.mgf = C.CKG_MGF1_SHA384
-	case crypto.SHA512:
-		cParam.hashAlg = C.CKM_SHA512
-		cParam.mgf = C.CKG_MGF1_SHA512
-	case crypto.SHA1:
-		cParam.hashAlg = C.CKM_SHA_1
-		cParam.mgf = C.CKG_MGF1_SHA1
-	default:
-		return nil, fmt.Errorf("unsupported hash algorithm: %s", hash)
-	}
-
 	cDataBytes := toCBytes(data)
-
-	cParam.source = C.CKZ_DATA_SPECIFIED
-	cParam.pSourceData = nil
-	cParam.ulSourceDataLen = 0
 
 	m := makeMechanism(C.CKM_RSA_PKCS_OAEP, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_OAEP_PARAMS)
 
@@ -1787,31 +1769,13 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 
 func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
 	hash := r.getHash()
-	cParam := (C.CK_RSA_PKCS_OAEP_PARAMS_PTR)(C.malloc(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS))
+	cParam, err := makeCParamRSAOAEP(hash)
+	if err != nil {
+		return nil, err
+	}
 	defer C.free(unsafe.Pointer(cParam))
 
-	switch *hash {
-	case crypto.SHA256:
-		cParam.hashAlg = C.CKM_SHA256
-		cParam.mgf = C.CKG_MGF1_SHA256
-	case crypto.SHA384:
-		cParam.hashAlg = C.CKM_SHA384
-		cParam.mgf = C.CKG_MGF1_SHA384
-	case crypto.SHA512:
-		cParam.hashAlg = C.CKM_SHA512
-		cParam.mgf = C.CKG_MGF1_SHA512
-	case crypto.SHA1:
-		cParam.hashAlg = C.CKM_SHA_1
-		cParam.mgf = C.CKG_MGF1_SHA1
-	default:
-		return nil, fmt.Errorf("unsupported hash algorithm: %s", hash)
-	}
-
 	cEncDataBytes := toCBytes(encryptedData)
-
-	cParam.source = C.CKZ_DATA_SPECIFIED
-	cParam.pSourceData = nil
-	cParam.ulSourceDataLen = 0
 
 	m := makeMechanism(C.CKM_RSA_PKCS_OAEP, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_OAEP_PARAMS)
 
@@ -1863,4 +1827,31 @@ func makeMechanism(mech C.CK_MECHANISM_TYPE, paramPtr C.CK_VOID_PTR, paramLen in
 		ulParameterLen: C.CK_ULONG(paramLen),
 	}
 	return mechanism
+}
+
+func makeCParamRSAOAEP(hash *crypto.Hash) (C.CK_RSA_PKCS_OAEP_PARAMS_PTR, error) {
+	cParam := (C.CK_RSA_PKCS_OAEP_PARAMS_PTR)(C.malloc(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS))
+
+	switch *hash {
+	case crypto.SHA256:
+		cParam.hashAlg = C.CKM_SHA256
+		cParam.mgf = C.CKG_MGF1_SHA256
+	case crypto.SHA384:
+		cParam.hashAlg = C.CKM_SHA384
+		cParam.mgf = C.CKG_MGF1_SHA384
+	case crypto.SHA512:
+		cParam.hashAlg = C.CKM_SHA512
+		cParam.mgf = C.CKG_MGF1_SHA512
+	case crypto.SHA1:
+		cParam.hashAlg = C.CKM_SHA_1
+		cParam.mgf = C.CKG_MGF1_SHA1
+	default:
+		return nil, fmt.Errorf("makeCParamRSAOAEP error, unsupported hash algorithm: %s", hash)
+	}
+
+	cParam.source = C.CKZ_DATA_SPECIFIED
+	cParam.pSourceData = nil
+	cParam.ulSourceDataLen = 0
+
+	return cParam, nil
 }
