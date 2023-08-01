@@ -1233,7 +1233,7 @@ func (o Object) PrivateKey(pub crypto.PublicKey) (crypto.PrivateKey, error) {
 		if !ok {
 			return nil, fmt.Errorf("expected rsa public key, got: %T", pub)
 		}
-		return &rsaPrivateKey{o, p, nil, nil}, nil
+		return &rsaPrivateKey{o, p, nil, C.CK_INVALID_HANDLE}, nil
 	default:
 		return nil, fmt.Errorf("unsupported key type: 0x%x", *kt)
 	}
@@ -1253,7 +1253,7 @@ type rsaPrivateKey struct {
 	o    Object
 	pub  *rsa.PublicKey
 	hash *crypto.Hash
-	pubH *Object
+	pubH C.CK_OBJECT_HANDLE
 }
 
 func (r *rsaPrivateKey) Public() crypto.PublicKey {
@@ -1726,7 +1726,7 @@ func (r *rsaPrivateKey) getHash() *crypto.Hash {
 }
 
 func (r *rsaPrivateKey) WithPublicKeyHandle(o Object) *rsaPrivateKey {
-	r.pubH = &o
+	r.pubH = o.o
 	return r
 }
 
@@ -1760,7 +1760,7 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 
 	m := makeMechanism(C.CKM_RSA_PKCS_OAEP, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_OAEP_PARAMS)
 
-	rv := C.ck_encrypt_init(r.o.fl, r.o.h, &m, r.pubH.o)
+	rv := C.ck_encrypt_init(r.o.fl, r.o.h, &m, r.pubH)
 	if err := isOk("C_EncryptInit", rv); err != nil {
 		return nil, err
 	}
