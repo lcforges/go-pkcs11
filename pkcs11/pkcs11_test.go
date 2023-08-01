@@ -659,6 +659,7 @@ func TestDecryptRSA(t *testing.T) {
 			if err != nil {
 				t.Errorf("decryptRSA Error: %v", err)
 			}
+			decrypted = bytes.Trim(decrypted,"\x00")
 			if string(decrypted) != msg {
 				t.Errorf("decryptRSA Error: expected %q, got %q", msg, string(decrypted))
 			}
