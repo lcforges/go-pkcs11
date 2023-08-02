@@ -1855,3 +1855,20 @@ func makeCParamRSAOAEP(hash *crypto.Hash) (C.CK_RSA_PKCS_OAEP_PARAMS_PTR, error)
 
 	return cParam, nil
 }
+
+
+func Decrypt(key crypto.PrivateKey, encryptedData []byte) ([]byte, error) {
+	rsaPriv, ok := key.(*rsaPrivateKey) 
+	if !ok {
+		return nil, fmt.Errorf("Decrypt Error: expected type rsaPrivateKey, got %T", key)
+	}
+	return rsaPriv.decryptRSA(encryptedData)
+}
+
+func Encrypt(key crypto.PrivateKey, data []byte) ([]byte, error) {
+	rsaPriv, ok := key.(*rsaPrivateKey) 
+	if !ok {
+		return nil, fmt.Errorf("Decrypt Error: expected type rsaPrivateKey, got %T", key)
+	}
+	return rsaPriv.encryptRSA(data)
+}
