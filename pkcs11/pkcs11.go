@@ -1855,5 +1855,3 @@ func makeCParamRSAOAEP(hash *crypto.Hash) (C.CK_RSA_PKCS_OAEP_PARAMS_PTR, error)
 
 	return cParam, nil
 }
-
-//test
