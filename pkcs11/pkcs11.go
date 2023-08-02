@@ -1868,7 +1868,7 @@ func Decrypt(key crypto.PrivateKey, encryptedData []byte) ([]byte, error) {
 func Encrypt(key crypto.PrivateKey, data []byte) ([]byte, error) {
 	rsaPriv, ok := key.(*rsaPrivateKey) 
 	if !ok {
-		return nil, fmt.Errorf("Decrypt Error: expected type rsaPrivateKey, got %T", key)
+		return nil, fmt.Errorf("Encrypt Error: expected type rsaPrivateKey, got %T", key)
 	}
 	return rsaPriv.encryptRSA(data)
 }
