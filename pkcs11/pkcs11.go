@@ -1711,7 +1711,11 @@ func (s *Slot) generateECDSA(o keyOptions) (crypto.PrivateKey, error) {
 	return priv, nil
 }
 
-func (r *rsaPrivateKey) WithHash(hash crypto.Hash) (*rsaPrivateKey, error) {
+func WithHash(privKey crypto.PrivateKey, hash crypto.Hash) (crypto.PrivateKey, error) {
+	r, ok := privKey.(*rsaPrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("expected type rsaPrivateKey, but got type %T",privKey)
+	}
 	r.hash = &hash
 	return r, nil
 }
@@ -1721,7 +1725,7 @@ func (r *rsaPrivateKey) getHash() *crypto.Hash {
 		return r.hash
 	}
 	// Initialized to SHA256 if no hash specified
-	hash := crypto.SHA256
+	hash := crypto.SHA1
 	return &hash
 }
 
@@ -1731,6 +1735,9 @@ func (r *rsaPrivateKey) WithPublicKeyHandle(o Object) *rsaPrivateKey {
 }
 
 func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
+	if r.pubH == 0 {
+		// r = r.WithPublicKeyHandle()
+	}
 	hash := r.getHash()
 	cParam, err := makeCParamRSAOAEP(hash)
 	if err != nil {
@@ -1749,7 +1756,7 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 
 	var cCipherLen C.CK_ULONG
 
-	// First call is used to determine maximum length of encrypted data (PKCS Specifications Section 5.2)
+	// First call is used to determine maximum length of encrypted data (PKCS #11 Specifications Section 5.2)
 	rv = C.ck_encrypt(r.o.fl, r.o.h, &cDataBytes[0], C.CK_ULONG(len(cDataBytes)), nil, &cCipherLen)
 	if err := isOk("C_Encrypt", rv); err != nil {
 		return nil, err
