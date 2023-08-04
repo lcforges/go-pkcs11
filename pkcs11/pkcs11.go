@@ -1590,11 +1590,7 @@ func (s *Slot) generateRSA(o keyOptions) (crypto.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing private key: %w", err)
 	}
-	rsaPriv, ok := priv.(*rsaPrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("expected rsa private key, got: %T", pub)
-	}
-	rsaPriv.WithPublicKeyHandle(pubObj)
+	WithPublicKeyHandle(priv, pubObj)
 	return priv, nil
 }
 
@@ -1729,15 +1725,13 @@ func (r *rsaPrivateKey) getHash() *crypto.Hash {
 	return &hash
 }
 
-func (r *rsaPrivateKey) WithPublicKeyHandle(o Object) *rsaPrivateKey {
+func WithPublicKeyHandle(privKey crypto.PrivateKey, o Object) crypto.PrivateKey {
+	r := privKey.(*rsaPrivateKey)
 	r.pubH = o.o
-	return r
+	return privKey
 }
 
 func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
-	if r.pubH == 0 {
-		// r = r.WithPublicKeyHandle()
-	}
 	hash := r.getHash()
 	cParam, err := makeCParamRSAOAEP(hash)
 	if err != nil {
