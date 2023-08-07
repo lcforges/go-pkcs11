@@ -1710,7 +1710,7 @@ func (s *Slot) generateECDSA(o keyOptions) (crypto.PrivateKey, error) {
 func WithHash(privKey crypto.PrivateKey, hash crypto.Hash) (crypto.PrivateKey, error) {
 	r, ok := privKey.(*rsaPrivateKey)
 	if !ok {
-		return nil, fmt.Errorf("expected type rsaPrivateKey, but got type %T",privKey)
+		return nil, fmt.Errorf("expected type rsaPrivateKey, but got type %T", privKey)
 	}
 	r.hash = &hash
 	return r, nil
@@ -1721,7 +1721,7 @@ func (r *rsaPrivateKey) getHash() *crypto.Hash {
 		return r.hash
 	}
 	// Initialized to SHA256 if no hash specified
-	hash := crypto.SHA1
+	hash := crypto.SHA256
 	return &hash
 }
 
@@ -1857,9 +1857,8 @@ func makeCParamRSAOAEP(hash *crypto.Hash) (C.CK_RSA_PKCS_OAEP_PARAMS_PTR, error)
 	return cParam, nil
 }
 
-
 func Decrypt(key crypto.PrivateKey, encryptedData []byte) ([]byte, error) {
-	rsaPriv, ok := key.(*rsaPrivateKey) 
+	rsaPriv, ok := key.(*rsaPrivateKey)
 	if !ok {
 		return nil, fmt.Errorf("Decrypt Error: expected type rsaPrivateKey, got %T", key)
 	}
@@ -1867,7 +1866,7 @@ func Decrypt(key crypto.PrivateKey, encryptedData []byte) ([]byte, error) {
 }
 
 func Encrypt(key crypto.PrivateKey, data []byte) ([]byte, error) {
-	rsaPriv, ok := key.(*rsaPrivateKey) 
+	rsaPriv, ok := key.(*rsaPrivateKey)
 	if !ok {
 		return nil, fmt.Errorf("Encrypt Error: expected type rsaPrivateKey, got %T", key)
 	}

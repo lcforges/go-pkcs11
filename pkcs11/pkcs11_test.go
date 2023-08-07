@@ -648,6 +648,7 @@ func TestDecryptRSA(t *testing.T) {
 			if err != nil {
 				t.Fatalf("generate(%#v) failed: %v", o, err)
 			}
+			// SHA1 is the only hash function supported by softhsm
 			priv, err = WithHash(priv, crypto.SHA1)
 			if err != nil {
 				t.Errorf("WithHash error: %v", err)
@@ -664,7 +665,7 @@ func TestDecryptRSA(t *testing.T) {
 			if err != nil {
 				t.Errorf("decryptRSA Error: %v", err)
 			}
-			decrypted = bytes.Trim(decrypted,"\x00")
+			decrypted = bytes.Trim(decrypted, "\x00")
 			if string(decrypted) != msg {
 				t.Errorf("decryptRSA Error: expected %q, got %q", msg, string(decrypted))
 			}
@@ -702,7 +703,6 @@ func TestBenchmarkEncryptRSA(t *testing.T) {
 				t.Fatalf("Private Key unexpected type, got %T, want *rsaPrivateKey", priv)
 				return
 			}
-		
 
 			t.Log(testing.Benchmark(func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
