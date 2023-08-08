@@ -1590,7 +1590,7 @@ func (s *Slot) generateRSA(o keyOptions) (crypto.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing private key: %w", err)
 	}
-	WithPublicKeyHandle(priv, pubObj)
+	priv = WithPublicKeyHandle(priv, pubObj)
 	return priv, nil
 }
 
