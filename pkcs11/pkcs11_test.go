@@ -613,12 +613,15 @@ func TestEncryptRSA(t *testing.T) {
 			if err != nil {
 				t.Fatalf("generate(%#v) failed: %v", o, err)
 			}
+			// SHA1 is the only hash function supported by softhsm
+			priv, err = WithHash(priv, crypto.SHA1)
+			if err != nil {
+				t.Errorf("WithHash error: %v", err)
+			}
 			rsaPriv, ok := priv.(*rsaPrivateKey)
 			if !ok {
 				t.Fatalf("Private Key unexpected type, got %T, want *rsaPrivateKey", priv)
 			}
-			// SHA1 is the only hash function supported by softhsm
-			rsaPriv.WithHash(crypto.SHA1)
 			_, err = rsaPriv.encryptRSA(b)
 			if err != nil {
 				t.Errorf("encryptRSA Error: %v", err)
@@ -645,11 +648,15 @@ func TestDecryptRSA(t *testing.T) {
 			if err != nil {
 				t.Fatalf("generate(%#v) failed: %v", o, err)
 			}
+			// SHA1 is the only hash function supported by softhsm
+			priv, err = WithHash(priv, crypto.SHA1)
+			if err != nil {
+				t.Errorf("WithHash error: %v", err)
+			}
 			rsaPriv, ok := priv.(*rsaPrivateKey)
 			if !ok {
 				t.Fatalf("Private Key unexpected type, got %T, want *rsaPrivateKey", priv)
 			}
-			rsaPriv.WithHash(crypto.SHA1)
 			cipher, err := rsaPriv.encryptRSA(b)
 			if err != nil {
 				t.Errorf("encryptRSA Error: %v", err)
@@ -658,7 +665,7 @@ func TestDecryptRSA(t *testing.T) {
 			if err != nil {
 				t.Errorf("decryptRSA Error: %v", err)
 			}
-			decrypted = bytes.Trim(decrypted,"\x00")
+			decrypted = bytes.Trim(decrypted, "\x00")
 			if string(decrypted) != msg {
 				t.Errorf("decryptRSA Error: expected %q, got %q", msg, string(decrypted))
 			}
@@ -686,13 +693,16 @@ func TestBenchmarkEncryptRSA(t *testing.T) {
 				t.Fatalf("generate(%#v) failed: %v", o, err)
 				return
 			}
+			// SHA1 is the only hash function supported by softhsm
+			priv, err = WithHash(priv, crypto.SHA1)
+			if err != nil {
+				t.Errorf("WithHash error: %v", err)
+			}
 			rsaPriv, ok := priv.(*rsaPrivateKey)
 			if !ok {
 				t.Fatalf("Private Key unexpected type, got %T, want *rsaPrivateKey", priv)
 				return
 			}
-			// SHA1 is the only hash function supported by softhsm
-			rsaPriv.WithHash(crypto.SHA1)
 
 			t.Log(testing.Benchmark(func(b *testing.B) {
 				for i := 0; i < b.N; i++ {

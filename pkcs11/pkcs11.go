@@ -1590,11 +1590,7 @@ func (s *Slot) generateRSA(o keyOptions) (crypto.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing private key: %w", err)
 	}
-	rsaPriv, ok := priv.(*rsaPrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("expected rsa private key, got: %T", pub)
-	}
-	rsaPriv.WithPublicKeyHandle(pubObj)
+	priv = WithPublicKeyHandle(priv, pubObj)
 	return priv, nil
 }
 
@@ -1711,7 +1707,11 @@ func (s *Slot) generateECDSA(o keyOptions) (crypto.PrivateKey, error) {
 	return priv, nil
 }
 
-func (r *rsaPrivateKey) WithHash(hash crypto.Hash) (*rsaPrivateKey, error) {
+func WithHash(privKey crypto.PrivateKey, hash crypto.Hash) (crypto.PrivateKey, error) {
+	r, ok := privKey.(*rsaPrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("expected type rsaPrivateKey, but got type %T", privKey)
+	}
 	r.hash = &hash
 	return r, nil
 }
@@ -1725,9 +1725,10 @@ func (r *rsaPrivateKey) getHash() *crypto.Hash {
 	return &hash
 }
 
-func (r *rsaPrivateKey) WithPublicKeyHandle(o Object) *rsaPrivateKey {
+func WithPublicKeyHandle(privKey crypto.PrivateKey, o Object) crypto.PrivateKey {
+	r := privKey.(*rsaPrivateKey)
 	r.pubH = o.o
-	return r
+	return privKey
 }
 
 func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
@@ -1749,7 +1750,7 @@ func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
 
 	var cCipherLen C.CK_ULONG
 
-	// First call is used to determine maximum length of encrypted data (PKCS Specifications Section 5.2)
+	// First call is used to determine maximum length of encrypted data (PKCS #11 Specifications Section 5.2)
 	rv = C.ck_encrypt(r.o.fl, r.o.h, &cDataBytes[0], C.CK_ULONG(len(cDataBytes)), nil, &cCipherLen)
 	if err := isOk("C_Encrypt", rv); err != nil {
 		return nil, err
@@ -1854,4 +1855,20 @@ func makeCParamRSAOAEP(hash *crypto.Hash) (C.CK_RSA_PKCS_OAEP_PARAMS_PTR, error)
 	cParam.ulSourceDataLen = 0
 
 	return cParam, nil
+}
+
+func Decrypt(key crypto.PrivateKey, encryptedData []byte) ([]byte, error) {
+	rsaPriv, ok := key.(*rsaPrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("Decrypt Error: expected type rsaPrivateKey, got %T", key)
+	}
+	return rsaPriv.decryptRSA(encryptedData)
+}
+
+func Encrypt(key crypto.PrivateKey, data []byte) ([]byte, error) {
+	rsaPriv, ok := key.(*rsaPrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("Encrypt Error: expected type rsaPrivateKey, got %T", key)
+	}
+	return rsaPriv.encryptRSA(data)
 }
