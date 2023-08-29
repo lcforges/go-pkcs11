@@ -1230,8 +1230,8 @@ var hashPrefixes = map[crypto.Hash][]byte{
 }
 
 type rsaPrivateKey struct {
-	o    Object
-	pub  *rsa.PublicKey
+	o   Object
+	pub *rsa.PublicKey
 }
 
 func (r *rsaPrivateKey) Public() crypto.PublicKey {
@@ -1687,7 +1687,6 @@ func (s *Slot) generateECDSA(o keyOptions) (crypto.PrivateKey, error) {
 	}
 	return priv, nil
 }
-
 
 func (r *rsaPrivateKey) Decrypt(_ io.Reader, encryptedData []byte, opts crypto.DecrypterOpts) ([]byte, error) {
 	cParam := (C.CK_RSA_PKCS_OAEP_PARAMS_PTR)(C.malloc(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS))
