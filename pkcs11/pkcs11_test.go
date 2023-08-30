@@ -596,7 +596,7 @@ func TestCreateCertificate(t *testing.T) {
 	}
 }
 
-func TestDecrypt(t *testing.T) {
+func TestDecrypt_OAEP(t *testing.T) {
 	msg := "Plain text to encrypt"
 	b := []byte(msg)
 	tests := []struct {
@@ -618,13 +618,50 @@ func TestDecrypt(t *testing.T) {
 			// SHA1 is the only hash function supported by softhsm
 			cipher, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, rsaPub, b, nil)
 			if err != nil {
-				t.Errorf("EncryptOAEP Error: %v", err)
+				t.Fatalf("EncryptOAEP Error: %v", err)
 			}
-			opts := rsa.OAEPOptions{Hash: crypto.SHA1}
+			opts := &rsa.OAEPOptions{Hash: crypto.SHA1}
 			rsaDecrypter := priv.(crypto.Decrypter)
 			decrypted, err := rsaDecrypter.Decrypt(nil, cipher, opts)
 			if err != nil {
-				t.Errorf("Decrypt Error: %v", err)
+				t.Fatalf("Decrypt Error: %v", err)
+			}
+			if string(decrypted) != msg {
+				t.Errorf("Decrypt Error: expected %q, got %q", msg, string(decrypted))
+			}
+		})
+	}
+}
+
+func TestDecrypt_PKCS(t *testing.T) {
+	msg := "Plain text to encrypt"
+	b := []byte(msg)
+	tests := []struct {
+		name string
+		bits int
+	}{
+		{"2048", 2048},
+		{"4096", 4096},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := newTestSlot(t)
+			o := keyOptions{RSABits: test.bits}
+			priv, err := s.generate(o)
+			if err != nil {
+				t.Fatalf("generate(%#v) failed: %v", o, err)
+			}
+			rsaPub := priv.(*rsaPrivateKey).pub
+			cipher, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPub, b)
+			if err != nil {
+				t.Fatalf("EncryptPKCS1v15 Error: %v", err)
+			}
+			rsaDecrypter := priv.(crypto.Decrypter)
+
+			// nil opts for decrypting using PKCS #1 v 1.5
+			decrypted, err := rsaDecrypter.Decrypt(nil, cipher, nil)
+			if err != nil {
+				t.Fatalf("Decrypt Error: %v", err)
 			}
 			if string(decrypted) != msg {
 				t.Errorf("Decrypt Error: expected %q, got %q", msg, string(decrypted))

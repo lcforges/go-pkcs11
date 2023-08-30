@@ -1689,16 +1689,47 @@ func (s *Slot) generateECDSA(o keyOptions) (crypto.PrivateKey, error) {
 }
 
 func (r *rsaPrivateKey) Decrypt(_ io.Reader, encryptedData []byte, opts crypto.DecrypterOpts) ([]byte, error) {
+	if o, ok := opts.(*rsa.OAEPOptions); ok {
+		return r.decryptOAEP(encryptedData, o)
+	}
+
+	cEncDataBytes := toCBytes(encryptedData)
+
+	m := C.CK_MECHANISM{C.CKM_RSA_PKCS, nil, 0}
+
+	rv := C.ck_decrypt_init(r.o.fl, r.o.h, &m, r.o.o)
+	if err := isOk("C_DecryptInit", rv); err != nil {
+		return nil, err
+	}
+
+	var cDecryptedLen C.CK_ULONG
+
+	// First call is used to determine length necessary to hold decrypted data (PKCS #11 5.2)
+	rv = C.ck_decrypt(r.o.fl, r.o.h, &cEncDataBytes[0], C.CK_ULONG(len(cEncDataBytes)), nil, &cDecryptedLen)
+	if err := isOk("C_Decrypt", rv); err != nil {
+		return nil, err
+	}
+
+	cDecrypted := make([]C.CK_BYTE, cDecryptedLen)
+
+	rv = C.ck_decrypt(r.o.fl, r.o.h, &cEncDataBytes[0], C.CK_ULONG(len(cEncDataBytes)), &cDecrypted[0], &cDecryptedLen)
+	if err := isOk("C_Decrypt", rv); err != nil {
+		return nil, err
+	}
+
+	decrypted := toBytes(cDecrypted)
+
+	// Removes null padding (PKCS#11 5.2): http://docs.oasis-open.org/pkcs11/pkcs11-base/v2.40/os/pkcs11-base-v2.40-os.html#_Toc416959738
+	decrypted = bytes.Trim(decrypted, "\x00")
+
+	return decrypted, nil
+}
+
+func (r *rsaPrivateKey) decryptOAEP(encryptedData []byte, opts *rsa.OAEPOptions) ([]byte, error) {
 	cParam := (C.CK_RSA_PKCS_OAEP_PARAMS_PTR)(C.malloc(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS))
 	defer C.free(unsafe.Pointer(cParam))
 
-	optsOAEP, ok := opts.(rsa.OAEPOptions)
-	if !ok {
-		// TODO: add call to decrypt using pkcs1 v1.5
-		return nil, fmt.Errorf("Decrypt Error: expected type OAEPoptions, got %T", opts)
-	}
-
-	switch optsOAEP.Hash {
+	switch opts.Hash {
 	case crypto.SHA256:
 		cParam.hashAlg = C.CKM_SHA256
 		cParam.mgf = C.CKG_MGF1_SHA256
@@ -1712,7 +1743,7 @@ func (r *rsaPrivateKey) Decrypt(_ io.Reader, encryptedData []byte, opts crypto.D
 		cParam.hashAlg = C.CKM_SHA_1
 		cParam.mgf = C.CKG_MGF1_SHA1
 	default:
-		return nil, fmt.Errorf("decryptRSA error, unsupported hash algorithm: %s", optsOAEP.Hash)
+		return nil, fmt.Errorf("decryptRSA error, unsupported hash algorithm: %s", opts.Hash)
 	}
 
 	cParam.source = C.CKZ_DATA_SPECIFIED
@@ -1734,7 +1765,7 @@ func (r *rsaPrivateKey) Decrypt(_ io.Reader, encryptedData []byte, opts crypto.D
 
 	var cDecryptedLen C.CK_ULONG
 
-	// First call is used to determine length necessary to hold decrypted data
+	// First call is used to determine length necessary to hold decrypted data (PKCS #11 5.2)
 	rv = C.ck_decrypt(r.o.fl, r.o.h, &cEncDataBytes[0], C.CK_ULONG(len(cEncDataBytes)), nil, &cDecryptedLen)
 	if err := isOk("C_Decrypt", rv); err != nil {
 		return nil, err
