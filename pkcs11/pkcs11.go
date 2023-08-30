@@ -233,26 +233,6 @@ CK_RV ck_sign(
 	return (*fl->C_Sign)(hSession, pData, ulDataLen, pSignature, pulSignatureLen);
 }
 
-CK_RV ck_encrypt_init(
-	CK_FUNCTION_LIST_PTR fl,
-	CK_SESSION_HANDLE hSession,
-	CK_MECHANISM_PTR  pMechanism,
-	CK_OBJECT_HANDLE  hKey
-) {
-	return (*fl->C_EncryptInit)(hSession, pMechanism, hKey);
-}
-
-CK_RV ck_encrypt(
-	CK_FUNCTION_LIST_PTR fl,
-	CK_SESSION_HANDLE hSession,
-	CK_BYTE_PTR       pData,
-	CK_ULONG          ulDataLen,
-	CK_BYTE_PTR       pEncryptedData,
-	CK_ULONG_PTR      pulEncryptedDataLen
-) {
-	return (*fl->C_Encrypt)(hSession, pData,  ulDataLen, pEncryptedData, pulEncryptedDataLen);
-}
-
 CK_RV ck_decrypt_init(
 	CK_FUNCTION_LIST_PTR fl,
 	CK_SESSION_HANDLE hSession,
@@ -1233,7 +1213,7 @@ func (o Object) PrivateKey(pub crypto.PublicKey) (crypto.PrivateKey, error) {
 		if !ok {
 			return nil, fmt.Errorf("expected rsa public key, got: %T", pub)
 		}
-		return &rsaPrivateKey{o, p, nil, C.CK_INVALID_HANDLE}, nil
+		return &rsaPrivateKey{o, p}, nil
 	default:
 		return nil, fmt.Errorf("unsupported key type: 0x%x", *kt)
 	}
@@ -1250,10 +1230,8 @@ var hashPrefixes = map[crypto.Hash][]byte{
 }
 
 type rsaPrivateKey struct {
-	o    Object
-	pub  *rsa.PublicKey
-	hash *crypto.Hash
-	pubH C.CK_OBJECT_HANDLE
+	o   Object
+	pub *rsa.PublicKey
 }
 
 func (r *rsaPrivateKey) Public() crypto.PublicKey {
@@ -1281,7 +1259,7 @@ func (r *rsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts)
 	cSig := make([]C.CK_BYTE, r.pub.Size())
 	cSigLen := C.CK_ULONG(len(cSig))
 
-	m := makeMechanism(C.CKM_RSA_PKCS, nil, 0)
+	m := C.CK_MECHANISM{C.CKM_RSA_PKCS, nil, 0}
 	rv := C.ck_sign_init(r.o.fl, r.o.h, &m, r.o.o)
 	if err := isOk("C_SignInit", rv); err != nil {
 		return nil, err
@@ -1334,7 +1312,11 @@ func (r *rsaPrivateKey) signPSS(digest []byte, opts *rsa.PSSOptions) ([]byte, er
 	cSig := make([]C.CK_BYTE, r.pub.Size())
 	cSigLen := C.CK_ULONG(len(cSig))
 
-	m := makeMechanism(C.CKM_RSA_PKCS_PSS, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_PSS_PARAMS)
+	m := C.CK_MECHANISM{
+		mechanism:      C.CKM_RSA_PKCS_PSS,
+		pParameter:     C.CK_VOID_PTR(cParam),
+		ulParameterLen: C.CK_ULONG(C.sizeof_CK_RSA_PKCS_PSS_PARAMS),
+	}
 
 	rv := C.ck_sign_init(r.o.fl, r.o.h, &m, r.o.o)
 	if err := isOk("C_SignInit", rv); err != nil {
@@ -1367,7 +1349,7 @@ type ecdsaSignature struct {
 
 func (e *ecdsaPrivateKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	// http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/cs01/pkcs11-curr-v2.40-cs01.html#_Toc399398884
-	m := makeMechanism(C.CKM_ECDSA, nil, 0)
+	m := C.CK_MECHANISM{C.CKM_ECDSA, nil, 0}
 	rv := C.ck_sign_init(e.o.fl, e.o.h, &m, e.o.o)
 	if err := isOk("C_SignInit", rv); err != nil {
 		return nil, err
@@ -1590,7 +1572,6 @@ func (s *Slot) generateRSA(o keyOptions) (crypto.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing private key: %w", err)
 	}
-	priv = WithPublicKeyHandle(priv, pubObj)
 	return priv, nil
 }
 
@@ -1707,78 +1688,44 @@ func (s *Slot) generateECDSA(o keyOptions) (crypto.PrivateKey, error) {
 	return priv, nil
 }
 
-func WithHash(privKey crypto.PrivateKey, hash crypto.Hash) (crypto.PrivateKey, error) {
-	r, ok := privKey.(*rsaPrivateKey)
+func (r *rsaPrivateKey) Decrypt(_ io.Reader, encryptedData []byte, opts crypto.DecrypterOpts) ([]byte, error) {
+	cParam := (C.CK_RSA_PKCS_OAEP_PARAMS_PTR)(C.malloc(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS))
+	defer C.free(unsafe.Pointer(cParam))
+
+	optsOAEP, ok := opts.(rsa.OAEPOptions)
 	if !ok {
-		return nil, fmt.Errorf("expected type rsaPrivateKey, but got type %T", privKey)
-	}
-	r.hash = &hash
-	return r, nil
-}
-
-func (r *rsaPrivateKey) getHash() *crypto.Hash {
-	if r.hash != nil {
-		return r.hash
-	}
-	// Initialized to SHA256 if no hash specified
-	hash := crypto.SHA256
-	return &hash
-}
-
-func WithPublicKeyHandle(privKey crypto.PrivateKey, o Object) crypto.PrivateKey {
-	r := privKey.(*rsaPrivateKey)
-	r.pubH = o.o
-	return privKey
-}
-
-func (r *rsaPrivateKey) encryptRSA(data []byte) ([]byte, error) {
-	hash := r.getHash()
-	cParam, err := makeCParamRSAOAEP(hash)
-	if err != nil {
-		return nil, err
-	}
-	defer C.free(unsafe.Pointer(cParam))
-
-	cDataBytes := toCBytes(data)
-
-	m := makeMechanism(C.CKM_RSA_PKCS_OAEP, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_OAEP_PARAMS)
-
-	rv := C.ck_encrypt_init(r.o.fl, r.o.h, &m, r.pubH)
-	if err := isOk("C_EncryptInit", rv); err != nil {
-		return nil, err
+		// TODO: add call to decrypt using pkcs1 v1.5
+		return nil, fmt.Errorf("Decrypt Error: expected type OAEPoptions, got %T", opts)
 	}
 
-	var cCipherLen C.CK_ULONG
-
-	// First call is used to determine maximum length of encrypted data (PKCS #11 Specifications Section 5.2)
-	rv = C.ck_encrypt(r.o.fl, r.o.h, &cDataBytes[0], C.CK_ULONG(len(cDataBytes)), nil, &cCipherLen)
-	if err := isOk("C_Encrypt", rv); err != nil {
-		return nil, err
+	switch optsOAEP.Hash {
+	case crypto.SHA256:
+		cParam.hashAlg = C.CKM_SHA256
+		cParam.mgf = C.CKG_MGF1_SHA256
+	case crypto.SHA384:
+		cParam.hashAlg = C.CKM_SHA384
+		cParam.mgf = C.CKG_MGF1_SHA384
+	case crypto.SHA512:
+		cParam.hashAlg = C.CKM_SHA512
+		cParam.mgf = C.CKG_MGF1_SHA512
+	case crypto.SHA1:
+		cParam.hashAlg = C.CKM_SHA_1
+		cParam.mgf = C.CKG_MGF1_SHA1
+	default:
+		return nil, fmt.Errorf("decryptRSA error, unsupported hash algorithm: %s", optsOAEP.Hash)
 	}
 
-	cCipher := make([]C.CK_BYTE, cCipherLen)
-
-	rv = C.ck_encrypt(r.o.fl, r.o.h, &cDataBytes[0], C.CK_ULONG(len(cDataBytes)), &cCipher[0], &cCipherLen)
-	if err := isOk("C_Encrypt", rv); err != nil {
-		return nil, err
-	}
-
-	cipher := toBytes(cCipher)
-
-	return cipher, nil
-}
-
-func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
-	hash := r.getHash()
-	cParam, err := makeCParamRSAOAEP(hash)
-	if err != nil {
-		return nil, err
-	}
-	defer C.free(unsafe.Pointer(cParam))
+	cParam.source = C.CKZ_DATA_SPECIFIED
+	cParam.pSourceData = nil
+	cParam.ulSourceDataLen = 0
 
 	cEncDataBytes := toCBytes(encryptedData)
 
-	m := makeMechanism(C.CKM_RSA_PKCS_OAEP, C.CK_VOID_PTR(cParam), C.sizeof_CK_RSA_PKCS_OAEP_PARAMS)
+	m := C.CK_MECHANISM{
+		mechanism:      C.CKM_RSA_PKCS_OAEP,
+		pParameter:     C.CK_VOID_PTR(cParam),
+		ulParameterLen: C.CK_ULONG(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS),
+	}
 
 	rv := C.ck_decrypt_init(r.o.fl, r.o.h, &m, r.o.o)
 	if err := isOk("C_DecryptInit", rv); err != nil {
@@ -1802,6 +1749,9 @@ func (r *rsaPrivateKey) decryptRSA(encryptedData []byte) ([]byte, error) {
 
 	decrypted := toBytes(cDecrypted)
 
+	// Removes null padding (PKCS11 5.2): http://docs.oasis-open.org/pkcs11/pkcs11-base/v2.40/os/pkcs11-base-v2.40-os.html#_Toc416959738
+	decrypted = bytes.Trim(decrypted, "\x00")
+
 	return decrypted, nil
 }
 
@@ -1819,56 +1769,4 @@ func toCBytes(data []byte) []C.CK_BYTE {
 		cBytes[i] = C.CK_BYTE(b)
 	}
 	return cBytes
-}
-
-func makeMechanism(mech C.CK_MECHANISM_TYPE, paramPtr C.CK_VOID_PTR, paramLen int) C.CK_MECHANISM {
-	mechanism := C.CK_MECHANISM{
-		mechanism:      mech,
-		pParameter:     paramPtr,
-		ulParameterLen: C.CK_ULONG(paramLen),
-	}
-	return mechanism
-}
-
-func makeCParamRSAOAEP(hash *crypto.Hash) (C.CK_RSA_PKCS_OAEP_PARAMS_PTR, error) {
-	cParam := (C.CK_RSA_PKCS_OAEP_PARAMS_PTR)(C.malloc(C.sizeof_CK_RSA_PKCS_OAEP_PARAMS))
-
-	switch *hash {
-	case crypto.SHA256:
-		cParam.hashAlg = C.CKM_SHA256
-		cParam.mgf = C.CKG_MGF1_SHA256
-	case crypto.SHA384:
-		cParam.hashAlg = C.CKM_SHA384
-		cParam.mgf = C.CKG_MGF1_SHA384
-	case crypto.SHA512:
-		cParam.hashAlg = C.CKM_SHA512
-		cParam.mgf = C.CKG_MGF1_SHA512
-	case crypto.SHA1:
-		cParam.hashAlg = C.CKM_SHA_1
-		cParam.mgf = C.CKG_MGF1_SHA1
-	default:
-		return nil, fmt.Errorf("makeCParamRSAOAEP error, unsupported hash algorithm: %s", hash)
-	}
-
-	cParam.source = C.CKZ_DATA_SPECIFIED
-	cParam.pSourceData = nil
-	cParam.ulSourceDataLen = 0
-
-	return cParam, nil
-}
-
-func Decrypt(key crypto.PrivateKey, encryptedData []byte) ([]byte, error) {
-	rsaPriv, ok := key.(*rsaPrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("Decrypt Error: expected type rsaPrivateKey, got %T", key)
-	}
-	return rsaPriv.decryptRSA(encryptedData)
-}
-
-func Encrypt(key crypto.PrivateKey, data []byte) ([]byte, error) {
-	rsaPriv, ok := key.(*rsaPrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("Encrypt Error: expected type rsaPrivateKey, got %T", key)
-	}
-	return rsaPriv.encryptRSA(data)
 }
