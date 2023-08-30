@@ -620,7 +620,7 @@ func TestDecrypt(t *testing.T) {
 			if err != nil {
 				t.Errorf("EncryptOAEP Error: %v", err)
 			}
-			opts := rsa.OAEPOptions{Hash: crypto.SHA1, MGFHash: crypto.SHA1, Label: nil}
+			opts := rsa.OAEPOptions{Hash: crypto.SHA1}
 			rsaDecrypter := priv.(crypto.Decrypter)
 			decrypted, err := rsaDecrypter.Decrypt(nil, cipher, opts)
 			if err != nil {
